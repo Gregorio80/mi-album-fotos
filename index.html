@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Screenshots fotos</title>
+<style>
+  @font-face { font-family: 'Archivo'; src: local('Archivo'); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f3f2f2; color: #201e1d; font-family: 'Archivo', Arial, sans-serif; }
+  .hr { border: none; border-top: 2px solid #201e1d; }
+  .btn { display: inline-block; padding: 12px 20px; border: 2px solid #201e1d; background: transparent; color: #201e1d; font-family: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+  .btn-primary { background: #ec3013; border-color: #ec3013; color: #f3f2f2; }
+  .btn-primary:hover { background: #c9260d; border-color: #c9260d; }
+  .btn-secondary:hover { background: #201e1d; color: #f3f2f2; }
+  .btn-block { width: 100%; }
+  .input { width: 100%; padding: 12px 14px; border: 2px solid #201e1d; background: #fff; color: #201e1d; font-family: inherit; font-size: 16px; outline: none; }
+  .input:focus-visible { outline: 2px solid #ec3013; outline-offset: 2px; }
+  .nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 2px solid #201e1d; }
+  .nav-brand { font-size: 18px; font-weight: 700; }
+  ::selection { background: #f6c3b6; }
+</style>
+</head>
+<body>
+
+<div id="lock-screen" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px;">
+  <form id="lock-form" style="width: 100%; max-width: 360px; border: 2px solid #201e1d; background: #fff; padding: 32px 28px; display: flex; flex-direction: column; gap: 16px;">
+    <h1 style="margin: 0; font-size: 28px;">Screenshots fotos</h1>
+    <p style="margin: 0 0 8px; color: #55504e;">Álbum privado</p>
+    <hr class="hr" style="margin: 0 0 8px;" />
+    <div>
+      <label for="pw" style="display: block; margin-bottom: 6px; font-size: 13px;">Contraseña</label>
+      <input id="pw" class="input" type="password" placeholder="••••••••" />
+    </div>
+    <p id="lock-error" style="display: none; font-size: 13px; color: #b3260d; margin: 0;">Contraseña incorrecta. Intenta de nuevo.</p>
+    <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+  </form>
+</div>
+
+<div id="album-screen" style="display: none;">
+  <div class="nav">
+    <span class="nav-brand">Screenshots fotos</span>
+    <button id="refresh-btn" class="btn btn-secondary">Actualizar</button>
+  </div>
+  <div style="max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px;">
+    <p id="status-msg" style="color: #55504e; font-size: 15px; padding: 32px 0;">Cargando fotos…</p>
+    <div id="grid" style="column-width: 280px; column-gap: 16px;"></div>
+  </div>
+</div>
+
+<script>
+  // ======= EDITA ESTOS TRES VALORES =======
+  var GITHUB_OWNER = 'tu-usuario-github';
+  var GITHUB_REPO = 'mi-album-fotos';
+  var PASSWORD = 'cambia-esta-clave';
+  // =========================================
+  var PHOTOS_PATH = 'photos';
+  var BRANCH = 'main';
+
+  var lockScreen = document.getElementById('lock-screen');
+  var albumScreen = document.getElementById('album-screen');
+  var lockForm = document.getElementById('lock-form');
+  var lockError = document.getElementById('lock-error');
+  var statusMsg = document.getElementById('status-msg');
+  var grid = document.getElementById('grid');
+  var refreshBtn = document.getElementById('refresh-btn');
+
+  function showAlbum() {
+    lockScreen.style.display = 'none';
+    albumScreen.style.display = 'block';
+    fetchPhotos();
+  }
+
+  lockForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var val = document.getElementById('pw').value;
+    if (val === PASSWORD) {
+      try { sessionStorage.setItem('album_unlocked_v1', '1'); } catch (e) {}
+      showAlbum();
+    } else {
+      lockError.style.display = 'block';
+      document.getElementById('pw').value = '';
+    }
+  });
+
+  refreshBtn.addEventListener('click', fetchPhotos);
+
+  function fetchPhotos() {
+    statusMsg.style.display = 'block';
+    statusMsg.style.color = '#55504e';
+    statusMsg.textContent = 'Cargando fotos…';
+    grid.innerHTML = '';
+    var url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeURIComponent(PHOTOS_PATH) + '?ref=' + BRANCH;
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) {
+          throw new Error(r.status === 404
+            ? 'No se encontró la carpeta de fotos. Revisa el usuario, el repositorio y el nombre de la carpeta.'
+            : 'Error al conectar con GitHub (código ' + r.status + ').');
+        }
+        return r.json();
+      })
+      .then(function (list) {
+        var imgs = (Array.isArray(list) ? list : []).filter(function (f) {
+          return f.type === 'file' && /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name);
+        });
+        imgs.sort(function (a, b) { return b.name.localeCompare(a.name); });
+        if (imgs.length === 0) {
+          statusMsg.textContent = 'Aún no hay fotos aquí. Envía la primera por correo y aparecerá en este lugar.';
+          return;
+        }
+        statusMsg.style.display = 'none';
+        imgs.forEach(function (photo) {
+          var img = document.createElement('img');
+          img.src = photo.download_url;
+          img.loading = 'lazy';
+          img.style.cssText = 'width:100%;display:block;margin-bottom:16px;break-inside:avoid;';
+          grid.appendChild(img);
+        });
+      })
+      .catch(function (err) {
+        statusMsg.style.color = '#b3260d';
+        statusMsg.textContent = 'No se pudo cargar el álbum. ' + err.message;
+      });
+  }
+
+  try {
+    if (sessionStorage.getItem('album_unlocked_v1') === '1') showAlbum();
+  } catch (e) {}
+</script>
+</body>
+</html>
